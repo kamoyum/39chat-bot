@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#2c2721">
+<title>築城記 Mobile</title>
+<style>
+:root{--p:#f4ead7;--ink:#29251f;--deep:#2c2721;--gold:#8a6844;--green:#526550}
+*{box-sizing:border-box}html,body{margin:0;background:#b9a88d;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Mincho ProN","Yu Mincho",serif;overscroll-behavior:none}
+header{position:sticky;top:0;z-index:20;background:#2c2721;color:#fff;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;display:flex;justify-content:space-between;align-items:center}
+h1{font-size:18px;margin:0}.meta{font-size:10px;text-align:right;opacity:.9}
+main{padding:0 0 calc(78px + env(safe-area-inset-bottom))}
+#map{width:100vw;height:auto;display:block;background:#a9c0c8;touch-action:none}
+.panel{background:var(--p);padding:10px;min-height:38vh}
+h2{font-size:16px;margin:0 0 8px}.note,.card{background:#fffdf8;border:1px solid #ccb99b;border-radius:12px;padding:9px;margin:7px 0;font-size:13px;line-height:1.45}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:7px}.tool{min-height:62px;border:1px solid #b49e7d;background:#fff9ee;border-radius:12px;text-align:left;padding:8px;font-weight:700}.tool small{display:block;font-size:10px;font-weight:400;margin-top:3px}.tool.on{background:#76583b;color:#fff}.tool.on small{color:#eee0cf}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,1fr);height:calc(67px + env(safe-area-inset-bottom));padding:5px 3px env(safe-area-inset-bottom);background:#2c2721ee;border-top:1px solid #816c50}
+.nav button{border:0;background:transparent;color:#e9decc;border-radius:10px;font-size:10px}.nav button.on{background:#80603e;color:#fff}.nav span{display:block;font-size:22px}
+.next{position:fixed;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:31;width:60px;height:60px;border-radius:50%;border:2px solid #dfcaa3;background:var(--green);color:#fff;font-weight:700}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.stat{background:#fffdf8;border:1px solid #ccb99b;border-radius:10px;padding:8px;font-size:12px}
+button{font:inherit;-webkit-tap-highlight-color:transparent}
+select{width:100%;min-height:44px;border:1px solid #b59f7c;background:#fff;border-radius:10px;padding:6px}
+#toast{position:fixed;left:12px;right:12px;bottom:calc(145px + env(safe-area-inset-bottom));z-index:40;background:#211e1acc;color:#fff;padding:10px;border-radius:12px;text-align:center;display:none}
+</style>
+</head>
+<body>
+<header><h1>築城記</h1><div class="meta"><span id="date"></span><br><span id="stage"></span></div></header>
+<canvas id="map" width="900" height="610"></canvas>
+<section class="panel" id="panel"></section>
+<button class="next" id="next">季節<br>▶</button>
+<nav class="nav">
+<button data-tab="build" class="on"><span>🏯</span>普請</button>
+<button data-tab="domain"><span>🌾</span>領国</button>
+<button data-tab="world"><span>🗺️</span>勢力</button>
+<button data-tab="trade"><span>⚓</span>交易</button>
+<button data-tab="log"><span>📜</span>城史</button>
+</nav>
+<div id="toast"></div>
+<script>
+const R=15,C=15,SS=["春","夏","秋","冬"],B={
+ road:["道","▫️",1,0,1],farm:["田畑","🌾",3,0,1],house:["町家","🏠",6,0,2],market:["市","🏮",9,0,5],
+ wall:["石垣","🧱",0,7,1],moat:["堀","💧",1,0,1],gate:["城門","🚪",10,8,4],tower:["櫓","🗼",12,13,5],
+ keep:["天守","🏯",28,36,20],port:["湊","⚓",16,4,10],temple:["寺社","⛩️",13,6,6],workshop:["職人区","🔨",10,3,4]
+};
+let S=JSON.parse(localStorage.getItem("chikujo_quick")||"null")||{tab:"build",sel:"road",y:1560,s:0,food:150,wood:105,stone:90,gold:76,pop:72,trade:8,prestige:18,security:62,war:2,dis:2,stage:1,log:[],cells:[]};
+const cv=document.getElementById("map"),x=cv.getContext("2d"),P=document.getElementById("panel");
+function i(r,c){return r*C+c}
+function init(){if(S.cells.length)return;S.cells=Array.from({length:R*C},(_,k)=>{let r=Math.floor(k/C),c=k%C,t="plain";if(c===8)t="river";if(r<4&&c<6)t="hill";if((r>10&&c<5)||(r<4&&c>11))t="forest";if(r===8&&c!==8)t="road";return{t,b:"",age:0}});S.cells[i(6,5)].b="keep";S.cells[i(8,5)].b="gate";for(let c=3;c<8;c++)S.cells[i(8,c)].b="road";S.cells[i(8,3)].b="market";S.cells[i(9,3)].b="house";S.cells[i(9,4)].b="house";S.cells[i(10,4)].b="farm";S.log.push("1560年 春、小さな城と集落から歴史が始まった。")}
+function near(idx,type,d=1){let r=Math.floor(idx/C),c=idx%C;for(let a=-d;a<=d;a++)for(let b=-d;b<=d;b++){let rr=r+a,cc=c+b;if(rr>=0&&rr<R&&cc>=0&&cc<C&&S.cells[i(rr,cc)].b===type)return true}return false}
+function terr(idx,type,d=1){let r=Math.floor(idx/C),c=idx%C;for(let a=-d;a<=d;a++)for(let b=-d;b<=d;b++){let rr=r+a,cc=c+b;if(rr>=0&&rr<R&&cc>=0&&cc<C&&S.cells[i(rr,cc)].t===type)return true}return false}
+function bonus(idx,b){let t=S.cells[idx].t,v=0;if(b==="farm"&&terr(idx,"river",1))v+=4;if(b==="market"&&(t==="road"||near(idx,"road",1)))v+=3;if(b==="market"&&near(idx,"gate",2))v+=2;if(b==="house"&&near(idx,"road",1))v+=2;if(b==="port"&&t!=="river")return-99;if(b==="port")v+=5;if(b==="wall"&&t==="hill")v+=3;if(b==="moat"&&terr(idx,"river",1))v+=4;if(b==="tower"&&near(idx,"wall",1))v+=3;if(b==="keep"&&t==="hill")v+=4;return v}
+function save(){localStorage.setItem("chikujo_quick",JSON.stringify(S))}
+function toast(m){let e=document.getElementById("toast");e.textContent=m;e.style.display="block";clearTimeout(window.tt);window.tt=setTimeout(()=>e.style.display="none",1500)}
+function date(){return S.y+"年 "+SS[S.s]}
+function count(b){return S.cells.filter(c=>c.b===b).length}
+function defense(){return 8+count("wall")*3+count("moat")*2+count("gate")*4+count("tower")*7+count("keep")*14}
+function build(idx){let d=B[S.sel],c=S.cells[idx],bo=bonus(idx,S.sel);if(bo<-90)return toast("ここには建てられない");if(c.b&&S.sel!=="road")return toast("すでに施設があります");if(S.wood<d[2]||S.stone<d[3]||S.gold<d[4])return toast("資材不足");S.wood-=d[2];S.stone-=d[3];S.gold-=d[4];c.b=S.sel;c.age=0;if(S.sel==="port")S.trade+=5;if(S.sel==="temple")S.prestige++;S.log.push(date()+"、"+d[0]+"を築いた。");updateStage();save();render()}
+function next(){let f=0,g=0;S.cells.forEach((c,idx)=>{if(c.b)c.age++;if(c.b==="farm")f+=5+Math.max(0,bonus(idx,"farm"));if(c.b==="market")g+=3+Math.max(0,bonus(idx,"market"));if(c.b==="port"){g+=5;S.trade++}if(c.b==="workshop")g+=2});S.food+=f-Math.ceil(S.pop*.16);S.gold+=g;let cand=S.cells.map((c,k)=>[c,k]).filter(([c])=>!c.b&&c.t!=="river");for(let [c,k] of cand){if((near(k,"road",1)||c.t==="road")&&near(k,"gate",3)&&Math.random()<.025){c.b="house";S.pop+=3;break}}S.s++;if(S.s>3){S.s=0;S.y++}if(Math.random()<[.01,.03,.06,.1][S.dis]){let loss=4+Math.floor(Math.random()*7);S.food=Math.max(0,S.food-loss);S.log.push(date()+"、災害により食料"+loss+"を失った。");toast("災害が発生")}else if(S.war&&Math.random()<[0,.01,.025,.05][S.war]){let d=defense(),a=25+Math.floor(Math.random()*35);if(d>=a){S.prestige+=2;S.log.push(date()+"、周辺勢力との争いをしのいだ。");toast("城の備えで持ちこたえた")}else{S.gold=Math.max(0,S.gold-8);S.security=Math.max(0,S.security-5);S.log.push(date()+"、争いで城下に被害。");toast("城下に被害")}}updateStage();save();render()}
+function updateStage(){let n=1;if(S.pop>=100||count("house")>=6)n=2;if(S.pop>=180)n=3;if(S.trade>=25&&count("port"))n=4;if(n>S.stage){S.stage=n;S.log.push(date()+"、領国は新たな発展段階へ進んだ。")}}
+function draw(){x.clearRect(0,0,cv.width,cv.height);x.fillStyle="#a8bec5";x.fillRect(0,0,cv.width,95);let tw=48,th=24,ox=450,oy=85;for(let sum=0;sum<R+C-1;sum++)for(let r=0;r<R;r++){let c=sum-r;if(c<0||c>=C)continue;let ce=S.cells[i(r,c)],px=ox+(c-r)*tw/2,py=oy+(c+r)*th/2,col=ce.t==="river"?"#72acc4":ce.t==="hill"?"#8ead73":ce.t==="forest"?"#76a163":ce.t==="road"?"#b89a72":"#afcb91";x.beginPath();x.moveTo(px,py-th/2);x.lineTo(px+tw/2,py);x.lineTo(px,py+th/2);x.lineTo(px-tw/2,py);x.closePath();x.fillStyle=col;x.fill();x.strokeStyle="#00000016";x.stroke();if(ce.b){x.font="16px system-ui";x.textAlign="center";x.textBaseline="middle";x.fillText(B[ce.b]?.[1]||"•",px,py-2)}}}
+function cellAt(mx,my){let tw=48,th=24,ox=450,oy=85,a=(mx-ox)/(tw/2),b=(my-oy)/(th/2),c=Math.floor((a+b)/2),r=Math.floor((b-a)/2);return r>=0&&r<R&&c>=0&&c<C?i(r,c):-1}
+cv.addEventListener("pointerup",e=>{if(S.tab!=="build")return;let q=cv.getBoundingClientRect(),idx=cellAt((e.clientX-q.left)*cv.width/q.width,(e.clientY-q.top)*cv.height/q.height);if(idx>=0)build(idx)});
+function renderPanel(){if(S.tab==="build"){P.innerHTML='<h2>普請</h2><div class="tools">'+Object.entries(B).map(([k,d])=>'<button class="tool '+(S.sel===k?"on":"")+'" data-b="'+k+'">'+d[1]+" "+d[0]+'<small>木'+d[2]+' 石'+d[3]+' 金'+d[4]+'</small></button>').join("")+'</div><div class="note">建物を選び、城の地図をタップ。立地によって効果が変わります。</div>';P.querySelectorAll("[data-b]").forEach(b=>b.onclick=()=>{S.sel=b.dataset.b;renderPanel()})}
+else if(S.tab==="domain"){P.innerHTML='<h2>領国</h2><div class="grid"><div class="stat">人口<br><b>'+S.pop+'</b></div><div class="stat">食料<br><b>'+S.food+'</b></div><div class="stat">金<br><b>'+S.gold+'</b></div><div class="stat">交易<br><b>'+S.trade+'</b></div><div class="stat">治安<br><b>'+S.security+'</b></div><div class="stat">城の備え<br><b>'+defense()+'</b></div></div><div class="note">道・門・市場を整えると、住民が自ら町家を増やします。</div>'}
+else if(S.tab==="world"){P.innerHTML='<h2>勢力</h2><div class="card">北山家　関係54 / 勢力45</div><div class="card">川辺衆　関係68 / 経済49</div><div class="card">西原家　関係43 / 勢力39</div><div class="card">海東商人衆　関係72 / 交易58</div><label>戦争頻度<select id="war"><option value="0">なし</option><option value="1">少ない</option><option value="2">標準</option><option value="3">多い</option></select></label><label>災害頻度<select id="dis"><option value="0">ごく少ない</option><option value="1">少ない</option><option value="2">標準</option><option value="3">多い</option></select></label>';document.getElementById("war").value=S.war;document.getElementById("dis").value=S.dis;document.getElementById("war").onchange=e=>{S.war=+e.target.value;save()};document.getElementById("dis").onchange=e=>{S.dis=+e.target.value;save()}}
+else if(S.tab==="trade"){P.innerHTML='<h2>交易</h2>'+["米","木材","鉄器","陶磁器","硝子器"].map((n,j)=>'<button class="tool" data-t="'+j+'">'+n+'を交易<small>投資して利益と交易経験を得る</small></button>').join("");P.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{let cost=6+(+b.dataset.t)*4;if(S.gold<cost)return toast("金不足");S.gold-=cost;let gain=Math.round(cost*(1.2+Math.random()*.5));S.gold+=gain;S.trade+=1+(+b.dataset.t>2?2:0);S.log.push(date()+"、交易で金"+gain+"を得た。");updateStage();save();render();toast("交易成立")})}
+else{P.innerHTML='<h2>城史</h2><div class="card">'+S.log.slice().reverse().map(v=>"・"+v).join("<br>")+'</div><button id="reset" class="tool">新しい歴史を始める</button>';document.getElementById("reset").onclick=()=>{if(confirm("現在の歴史を消して最初から始めますか？")){localStorage.removeItem("chikujo_quick");location.reload()}}}}
+function render(){document.getElementById("date").textContent=date();document.getElementById("stage").textContent=["","小城と集落","城下の形成","城郭都市","交易都市"][S.stage]||"城郭都市";document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===S.tab));renderPanel();draw()}
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;render()});document.getElementById("next").onclick=next;init();render();save();
+</script>
+</body></html>
